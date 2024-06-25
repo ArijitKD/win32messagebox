@@ -16,6 +16,7 @@ from subprocess import Popen, PIPE
 from time import sleep
 
 
+
 # Not for Windows! Use tkinter's messagebox, it's a lot better, atleast for Windows
 if (system() == 'Windows'):
     raise ImportError("This module is not for Windows. Please use tkinter\'s messagebox module.")
@@ -25,12 +26,9 @@ if (system() == 'Windows'):
 class Messagebox(tk.Toplevel):
     def __init__(self, master=None, title="messagebox", message="Message", **options):
 
-        # Store the master object so that if None, it could be withdrawn when the messagebox is displayed and destroyed after the messagebox is destroyed
-        self.this_master = master
-
         # Initailize the super class 
-        super().__init__(self.this_master)
-        
+        super().__init__(master)
+
         # Initialization based on options, load the default options if not specified
         buttons = options.get('buttons', ['ok', ])
         self.default = options.get('default', buttons[0])
@@ -66,11 +64,25 @@ class Messagebox(tk.Toplevel):
         # Determine the appropriate dimensions based on the message length, title length and number of buttons
         self.dimensions = self.get_appropriate_dimensions()
 
-        # Get the height and width from the dimensions and center the messagebox window on the screen
+        # Get the height and width from the dimensions and center the messagebox window on the master window
         self.height = int(self.dimensions[self.dimensions.index('x')+1::])
         self.width = int(self.dimensions[0:self.dimensions.index('x')])
-        center_x = int(self.winfo_screenwidth()/2 - self.width/2)
-        center_y = int(self.winfo_screenheight()/2 - self.height/2)
+        center_x = int(self.master.winfo_rootx()+self.master.winfo_width()-self.width-self.master.winfo_width()/2+self.width/2)
+        center_y = int(self.master.winfo_rooty()+self.master.winfo_height()-self.height-self.master.winfo_height()/2+self.height/2)
+
+        if (center_x+self.width > self.winfo_screenwidth()):
+            center_x = self.winfo_screenwidth() - self.width - 20
+        if (center_y+self.height > self.winfo_screenheight()):
+            center_y = self.winfo_screenheight() - self.height - 20
+        if (center_x+self.width < self.master.winfo_width()//2):
+            center_x = 20
+        if (center_y+self.height < self.master.winfo_height()//2):
+            center_y = 20   
+        if (center_x < 0):
+            center_x = int(self.master.winfo_screenwidth()/2 - self.width/2)
+        if (center_y < 0):
+            center_y = int(self.master.winfo_screenheight()/2 - self.height/2)
+
         self.geometry(self.dimensions+"+%d+%d"%(center_x, center_y))
 
         # Initialize a variable that will store the name of the button that was clicked by the user
@@ -85,6 +97,10 @@ class Messagebox(tk.Toplevel):
         self.attributes('-topmost', True)
         self.overrideredirect(True)
         self.protocol("WM_DELETE_WINDOW", self.exit)
+
+        # Remove master's close callback to avoid multiple toplevel windows from appearing on clicking the 'x' button
+        self.master_close_function = self.master.protocol("WM_DELETE_WINDOW")
+        self.master.protocol("WM_DELETE_WINDOW", self._dummy)
 
         # Keep track of whether the Selawik font is being installed
         self.installed_font = False
@@ -102,8 +118,6 @@ class Messagebox(tk.Toplevel):
 
         # Draw the window (Load all widgets)
         self.draw_window()
-
-        self.master.wait_window(self)
 
 
     def get_appropriate_dimensions(self):
@@ -144,14 +158,13 @@ class Messagebox(tk.Toplevel):
         self.withdraw()
         self.update_idletasks()
         self.deiconify()
-        self.attributes('-alpha', 0)
         alpha = 0
-        self.attributes('-alpha', 1)
         while (alpha < 1.25):
             self.attributes('-alpha', alpha)
             self.update_idletasks()
             sleep(0.03)
             alpha += 0.25
+        self.focus_set()
         self.grab_set()
 
 
@@ -160,15 +173,13 @@ class Messagebox(tk.Toplevel):
         self.update_idletasks()
         self.deiconify()
         self.config(bg=self.color_attr['body'])
-        self.attributes('-alpha', 1)
         alpha = 1
-        self.attributes('-alpha', 1)
         while (alpha > -0.25):
             self.attributes('-alpha', alpha)
             self.update_idletasks()
             sleep(0.04)
             alpha -= 0.25
-        self.grab_release()
+        self.master.focus_set()
 
 
     def draw_window(self):
@@ -264,11 +275,12 @@ class Messagebox(tk.Toplevel):
         self.bind("<Tab>", self._tab_handler)
         # Add a fade-in effect on window open
         self._fade_in()
-        self.button_widgets[self.default].focus_set()
+        self.button_widgets[self.default].focus_force()
+        #self.focus_lastfor(self.button_widgets[self.default])
         
 
     def _tab_handler(self, event):
-        print("tab")
+        self.button_widgets[self.default].focus_force()
 
 
     def _button_release_callback(self, event, button='general'):
@@ -303,10 +315,16 @@ class Messagebox(tk.Toplevel):
         self.message_label.configure(text=message)
 
 
+    def _dummy(self):
+        pass
+
     def exit(self):
         # Add a fade-out effect on window close
         self._fade_out()
         
+        # Restore master's close callback
+        self.master.protocol("WM_DELETE_WINDOW", self.master_close_function)
+
         # Destroy the toplevel window
         self.destroy()
 
@@ -325,6 +343,7 @@ def askokcancel(title="", message="", **options):
     fontsize = options.get('fontsize', 9)
 
     mbox = Messagebox(master, title, message, icon=icon, buttons=['ok', 'cancel'], default=default, fontsize=fontsize)
+    mbox.master.wait_window(mbox)
 
     return (mbox.button_clicked == 'ok')
 
@@ -339,6 +358,7 @@ def askquestion(title="", message="", **options):
     fontsize = options.get('fontsize', 9)
 
     mbox = Messagebox(master, title, message, icon=icon, buttons=['yes', 'no'], default=default, fontsize=fontsize)
+    mbox.master.wait_window(mbox)
 
     if (mbox.button_clicked == 'yes'):
         return 'yes'
@@ -355,6 +375,7 @@ def askretrycancel(title="", message="", **options):
     fontsize = options.get('fontsize', 9)
 
     mbox = Messagebox(master, title, message, icon=icon, buttons=['retry', 'cancel'], default=default, fontsize=fontsize)
+    mbox.master.wait_window(mbox)
 
     return (mbox.button_clicked == 'retry')
 
@@ -368,9 +389,9 @@ def askyesno(title="", message="", **options):
     default = options.get('default', 'yes')
     fontsize = options.get('fontsize', 9)
 
-    mbox = Messagebox(master, title, message, icon=icon, buttons=['yes', 'no'], default=default, fontsize=fontsize)
+    button = askquestion(title, message, master=master, icon=icon, buttons=['yes', 'no'], default=default, fontsize=fontsize)
 
-    return (mbox.button_clicked == 'yes')
+    return (button == 'yes')
 
 
 def askyesnocancel(title="", message="", **options):
@@ -383,6 +404,7 @@ def askyesnocancel(title="", message="", **options):
     fontsize = options.get('fontsize', 9)
 
     mbox = Messagebox(master, title, message, icon=icon, buttons=['yes', 'no', 'cancel'], default=default, fontsize=fontsize)
+    mbox.master.wait_window(mbox)
 
     if (mbox.button_clicked == 'yes'):
         return True
@@ -401,6 +423,7 @@ def showerror(title="", message="", **options):
     fontsize = options.get('fontsize', 9)
 
     mbox = Messagebox(master, title, message, icon=icon, buttons=['ok',], fontsize=fontsize)
+    mbox.master.wait_window(mbox)
 
     return 'ok'
 
@@ -414,6 +437,7 @@ def showinfo(title="", message="", **options):
     fontsize = options.get('fontsize', 9)
 
     mbox = Messagebox(master, title, message, icon=icon, buttons=['ok',], fontsize=fontsize)
+    mbox.master.wait_window(mbox)
 
     return 'ok'
 
@@ -427,6 +451,7 @@ def showwarning(title="", message="", **options):
     fontsize = options.get('fontsize', 9)
 
     mbox = Messagebox(master, title, message, icon=icon, buttons=['ok',], fontsize=fontsize)
+    mbox.master.wait_window(mbox)
 
     return 'ok'
 
