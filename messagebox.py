@@ -100,7 +100,7 @@ class Messagebox(tk.Toplevel):
 
         # Remove master's close callback to avoid multiple toplevel windows from appearing on clicking the 'x' button
         self.master_close_function = self.master.protocol("WM_DELETE_WINDOW")
-        self.master.protocol("WM_DELETE_WINDOW", self._dummy)
+        self.master.protocol("WM_DELETE_WINDOW", lambda: None)
 
         # Keep track of whether the Selawik font is being installed
         self.installed_font = False
@@ -118,6 +118,18 @@ class Messagebox(tk.Toplevel):
 
         # Draw the window (Load all widgets)
         self.draw_window()
+
+        self.all_master_event_sequences = {}
+
+        # Remove 'all' tag bindings from master
+        for event_seq in self.master.bind_class('all'):
+            self.all_master_event_sequences[event_seq] = self.master.bind_all(event_seq)
+            self.master.unbind_all(event_seq)
+
+        # Add a fade-in effect on window open
+        self._fade_in()
+        
+        self.after(50, lambda: self.button_widgets[self.default].focus_set())
 
 
     def get_appropriate_dimensions(self):
@@ -164,8 +176,8 @@ class Messagebox(tk.Toplevel):
             self.update_idletasks()
             sleep(0.03)
             alpha += 0.25
-        self.focus_set()
-        self.grab_set()
+        self.master.grab_set()
+        self.after(50, lambda: self.grab_set())
 
 
     def _fade_out(self):
@@ -179,7 +191,6 @@ class Messagebox(tk.Toplevel):
             self.update_idletasks()
             sleep(0.04)
             alpha -= 0.25
-        self.master.focus_set()
 
 
     def draw_window(self):
@@ -268,19 +279,26 @@ class Messagebox(tk.Toplevel):
             self.button_widgets[button].bind('<Button-1>', lambda event: event.widget.configure(style="press.TButton"))
             self.button_widgets[button].bind('<ButtonRelease-1>', lambda event, button='general': self._button_release_callback(event, button))
             self.button_widgets[button].bind('<B1-Motion><Enter>', lambda event: event.widget.configure(style="press.TButton"))
-            self.button_widgets[button].bind("<Tab>", self._tab_handler)
-
+            self.button_widgets[button].bind('<Tab>', self._tab_handler)
 
         # Bind events to messagebox
-        self.bind("<Tab>", self._tab_handler)
-        # Add a fade-in effect on window open
-        self._fade_in()
-        self.button_widgets[self.default].focus_force()
-        #self.focus_lastfor(self.button_widgets[self.default])
-        
+        self.bind("<Return>", self._return_handler)
+        self.bind_all("<Tab>", self._tab_handler)
+        #self.bind("<Enter><Leave>", lambda event: (self.grab_set(), self.focus_force(), print("Enter-leave")))
+        #self.bind("<Button-1>", lambda event: (self.overrideredirect(False), self.update(), self.grab_release(), self.grab_set(),))
+
+
+    def _return_handler(self, event):
+        self.button_clicked = self.focus_get().cget('text').lower()
+        self.exit()
+
 
     def _tab_handler(self, event):
-        self.button_widgets[self.default].focus_force()
+        button_widgets = list(self.button_widgets.values())
+        if (button_widgets.index(event.widget) == len(button_widgets)-1):
+            button_widgets[0].focus_set()
+        else:
+            button_widgets[button_widgets.index(event.widget)+1].focus_set()
 
 
     def _button_release_callback(self, event, button='general'):
@@ -305,18 +323,7 @@ class Messagebox(tk.Toplevel):
             event.widget.configure(style="onhover.TButton")
         else:
             event.widget.configure(style="offhover.TButton")
-        
 
-    def settitle(self, title):
-        self.title_label.configure(text=title)
-
-
-    def setmessage(self, message):
-        self.message_label.configure(text=message)
-
-
-    def _dummy(self):
-        pass
 
     def exit(self):
         # Add a fade-out effect on window close
@@ -324,6 +331,13 @@ class Messagebox(tk.Toplevel):
         
         # Restore master's close callback
         self.master.protocol("WM_DELETE_WINDOW", self.master_close_function)
+
+        # Restore 'all' tag bindings to master
+        for event_seq in self.all_master_event_sequences:
+            self.master.bind_all(event_seq, self.all_master_event_sequences[event_seq])
+
+        # Set grab on master
+        self.master.grab_set()
 
         # Destroy the toplevel window
         self.destroy()
@@ -422,7 +436,7 @@ def showerror(title="", message="", **options):
     icon = options.get('icon', 'error')
     fontsize = options.get('fontsize', 9)
 
-    mbox = Messagebox(master, title, message, icon=icon, buttons=['ok',], fontsize=fontsize)
+    mbox = Messagebox(master, title, message, icon=icon, fontsize=fontsize)
     mbox.master.wait_window(mbox)
 
     return 'ok'
@@ -436,7 +450,7 @@ def showinfo(title="", message="", **options):
     icon = options.get('icon', 'info')
     fontsize = options.get('fontsize', 9)
 
-    mbox = Messagebox(master, title, message, icon=icon, buttons=['ok',], fontsize=fontsize)
+    mbox = Messagebox(master, title, message, icon=icon, fontsize=fontsize)
     mbox.master.wait_window(mbox)
 
     return 'ok'
@@ -450,7 +464,7 @@ def showwarning(title="", message="", **options):
     icon = options.get('icon', 'warning')
     fontsize = options.get('fontsize', 9)
 
-    mbox = Messagebox(master, title, message, icon=icon, buttons=['ok',], fontsize=fontsize)
+    mbox = Messagebox(master, title, message, icon=icon, fontsize=fontsize)
     mbox.master.wait_window(mbox)
 
     return 'ok'
