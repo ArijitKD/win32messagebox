@@ -284,8 +284,6 @@ class Messagebox(tk.Toplevel):
         # Bind events to messagebox
         self.bind("<Return>", self._return_handler)
         self.bind_all("<Tab>", self._tab_handler)
-        #self.bind("<Enter><Leave>", lambda event: (self.grab_set(), self.focus_force(), print("Enter-leave")))
-        #self.bind("<Button-1>", lambda event: (self.overrideredirect(False), self.update(), self.grab_release(), self.grab_set(),))
 
 
     def _return_handler(self, event):
