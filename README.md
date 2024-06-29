@@ -1,5 +1,5 @@
 # win32messagebox
-A Python package for Linux and MacOS, compatible with tkinter's messagebox module, that provides a Windows-like message box.
+A Python package for Linux and MacOS, compatible with tkinter's messagebox module, that provides an API for Windows-like messageboxes.
 
 # Known issues:
 * Messagebox may permanently lose focus, or gain focus only on hover, if grab is set on some other window by clicking.
