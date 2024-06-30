@@ -1,3 +1,27 @@
+'''
+MIT License
+
+Copyright (c) 2024 Arijit Kumar Das <arijitkdgit.official@gmail.com>
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+'''
+
 # Icon images from Freeimages.com
 
 # Sound-effects by UNIVERSFIELD <https://pixabay.com/users/universfield-28281460/> (License: <https://pixabay.com/service/terms/>)
@@ -28,6 +52,9 @@ class Messagebox(tk.Toplevel):
 
         # Initailize the super class 
         super().__init__(master)
+
+        # Save the last focused on widget
+        self.last_focused_on_widget = self.master.focus_get()
 
         # Initialization based on options, load the default options if not specified
         buttons = options.get('buttons', ['ok', ])
@@ -98,9 +125,24 @@ class Messagebox(tk.Toplevel):
         self.overrideredirect(True)
         self.protocol("WM_DELETE_WINDOW", self.exit)
 
-        # Remove master's close callback to avoid multiple toplevel windows from appearing on clicking the 'x' button
+        # Remove master's WM_DELETE_WINDOW protocol to avoid multiple toplevel windows from appearing on clicking the 'x' button
         self.master_close_function = self.master.protocol("WM_DELETE_WINDOW")
         self.master.protocol("WM_DELETE_WINDOW", lambda: None)
+
+        # Remove master's WM_PROTOCOLS
+        self.master_protocols = self.master.protocol("WM_PROTOCOLS")
+        self.master.protocol("WM_PROTOCOLS", lambda: None)
+
+        # Remove master's WM_TAKE_FOCUS protocol and add a custom callback so that whenever the master takes focus the default button in messagebox is selected
+        # The default protocol will be restored later
+        self.master._focus_take_function = self.master.protocol("WM_TAKE_FOCUS")
+        self.master.protocol("WM_TAKE_FOCUS", lambda: self.after(100, lambda: self.button_widgets[self.default].focus_set()))
+
+        # Adding WM_TAKE_FOCUS protocol to messagebox
+        self.protocol("WM_TAKE_FOCUS", lambda: self.after(100, lambda: self.button_widgets[self.default].focus_set()))
+
+        # Binding Button-1 so that on clicking on master focus, if lost is restored into the messagebox by clicking
+        self.bind("<Button-1>", lambda event: self.after(100, lambda: self.button_widgets[self.default].focus_set()))
 
         # Keep track of whether the Selawik font is being installed
         self.installed_font = False
@@ -129,10 +171,30 @@ class Messagebox(tk.Toplevel):
         # Add a fade-in effect on window open
         self._fade_in()
         
-        self.after(50, lambda: self.button_widgets[self.default].focus_set())
+        self.after(100, lambda: self.button_widgets[self.default].focus_set())
 
 
     def get_appropriate_dimensions(self):
+        master_width = self.master.winfo_width()
+        master_height = self.master.winfo_height()
+        default_width = 320
+        default_height = 160
+        max_char_per_line = 70        
+        
+        message_words = self.message.split(" ")
+        message_lines = []
+        message_line = ""
+        for i in range(len(message_words)-1):
+            message_line += message_words[i] + " "
+            if (len(message_line+" "+message_words[i+1]) > max_char_per_line):
+                message_lines.append(message_line.rstrip())
+                message_line = ""
+        if (message_lines != []):
+            if (len(message_lines[-1]+" "+message_words[-1]) > max_char_per_line):
+                message_lines.append(message_words[-1])
+            else:
+                message_lines[-1] = message_lines[-1]+" "+message_words[-1]
+        print (message_lines)
         return "320x160"
 
 
@@ -327,8 +389,14 @@ class Messagebox(tk.Toplevel):
         # Add a fade-out effect on window close
         self._fade_out()
         
-        # Restore master's close callback
+        # Restore master's WM_DELETE_WINDOW
         self.master.protocol("WM_DELETE_WINDOW", self.master_close_function)
+
+        # Restore master's WM_TAKE_FOCUS
+        self.master.protocol("WM_TAKE_FOCUS",  self.master._focus_take_function)
+
+        # Restore master's WM_PROTOCOLS
+        self.master.protocol("WM_PROTOCOLS", self.master_protocols)
 
         # Restore 'all' tag bindings to master
         for event_seq in self.all_master_event_sequences:
@@ -336,6 +404,13 @@ class Messagebox(tk.Toplevel):
 
         # Set grab on master
         self.master.grab_set()
+
+        # Set focus on master first
+        self.master.focus_set()
+
+        # Try to set focus on the last focused widget after 100ms, otherwise leave it
+        if (self.last_focused_on_widget is not None):
+            self.master.after(100, lambda: self.last_focused_on_widget.focus_set())
 
         # Destroy the toplevel window
         self.destroy()
@@ -472,5 +547,3 @@ if __name__ == "__main__":
     root = tk.Tk()
     ret = askyesno(master=root, title="Message", message="This is an askyesno() messagebox.")
     print (ret)
-    root.bind("<Button-1>", lambda event: root.destroy())
-    root.mainloop()
